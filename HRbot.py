@@ -176,7 +176,7 @@ Kompaniyamiz asoschisi — Samanov Bobur.
 
 Bizning asosiy maqsadlarimiz:
 — Yangi ish o'rinlari yaratish
-— Mijozlarga yuqori sifatli xizmat ko'rsatish
+— Mijozlarga yuqori sifatli xizmat ko'rPYTsatish
 — O'zbekiston rivojiga o'z hissamizni qo'shish
 
 Biz har bir hamkorlikda ishonch va sifatni ustuvor deb bilamiz. 
