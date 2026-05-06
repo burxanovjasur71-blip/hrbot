@@ -1,2 +1,3 @@
 python-telegram-bot
-fpdf
+fpdf2==2.8.2
+aiogram
