@@ -150,19 +150,19 @@ class Questionnaire(StatesGroup):
 questions = [
     "Ismingiz va familiyangiz?",
     "Tug'ilgan yilingiz?",
-    "Telefon raqamingiz?",
+    "Telefon raqamingiz va Telegarm username ingiz?",
     "Qaysi shaharda/tumanda yashaysiz?",
-    "Telegram username'ingiz?",
+    "Malumotingiz va oilangiz haqida malumot?",
     "Selfi rasmingizni yuboring (foto):",
-    "Nega aynan shu ish sizga qiziq?",
+    "Biz taklif qilgan ishda qancha vaqt ishlay olasiz?",
     "Qachondan ish boshlay olasiz?",
     "Mutaxassisligingiz?",
     "Qayerlarda ishlagansiz va qanday lavozimlarda?",
-    "Qancha vaqt ishlagansiz?",
-    "Qaysi kompyuter dasturlarini bilasiz?",
+    "Qancha vaqt ishlagansiz va ishdan bo'shashingiz sababi?",
+    "Ota-onangizning kasbi va faoliyati haqida ma’lumot bering?",
     "Qaysi tillarni bilasiz?",
-    "Qanday ish grafigi sizga mos?",
-    "Kutilayotgan oylik maoshingiz (taxminan)?"
+    "Ko'rsatilgan ish vaqti sizga mos keladimi(10:00 dan 20:00)?",
+    "Taqdim etilgan oylik maosh sizga maqulmi(6 000 000 dan boshlanadi)?"
 ]
 
 # Start komandasi
