@@ -1,32 +1,25 @@
 import asyncio
 import logging
-from datetime import datetime
 import os
 import re
-import sys
-import platform
-from io import BytesIO
-import textwrap
-from pathlib import Path
+from datetime import datetime
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import (
+    Message, FSInputFile, InlineKeyboardMarkup,
+    InlineKeyboardButton, CallbackQuery
+)
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.lib.utils import ImageReader
+from reportlab.lib import colors
 
-# Logging
+# ==================== SOZLAMALAR ====================
 logging.basicConfig(level=logging.INFO)
 
-# Bot token
 BOT_TOKEN = "8653151262:AAGl4mNfcA2Qvd8zpn8d79IOhlDLohh1XfQ"
-
-# Guruh ID
 GROUP_ID = -1003918988982
 
 bot = Bot(token=BOT_TOKEN)
@@ -34,219 +27,40 @@ dp = Dispatcher()
 router = Router()
 dp.include_router(router)
 
-# ============ RUSCHA HARFLAR UCHUN SHRIFT SOZLASH ============
-class FontManager:
-    """Ruscha va boshqa tillarni qo'llab-quvvatlaydigan shriftlarni boshqarish"""
-    
-    def __init__(self):
-        self.font_name = None
-        self.font_loaded = False
-        
-    def find_windows_fonts(self):
-        """Windows tizimida ruscha harflarni qo'llab-quvvatlaydigan shriftlarni topish"""
-        font_paths = []
-        
-        # Windows shrift papkalari (turli yo'llar)
-        possible_paths = []
-        
-        # Windows drive harflari
-        for drive in ['C:', 'D:', 'E:']:
-            windows_paths = [
-                f'{drive}/Windows/Fonts/',
-                f'{drive}/WINNT/Fonts/',
-                f'{drive}/WINDOWS/Fonts/',
-                f'{drive}/Windows/Fonts/',
-            ]
-            possible_paths.extend(windows_paths)
-        
-        # WSL uchun maxsus yo'llar
-        if 'microsoft' in platform.uname().release.lower() or 'WSL' in platform.uname().version:
-            wsl_paths = [
-                '/mnt/c/Windows/Fonts/',
-                '/mnt/c/WINDOWS/Fonts/',
-                '/usr/share/fonts/truetype/dejavu/',
-                '/usr/share/fonts/truetype/freefont/',
-                '/usr/share/fonts/truetype/liberation/',
-                '/usr/share/fonts/truetype/noto/',
-            ]
-            possible_paths.extend(wsl_paths)
-        
-        # Ruscha harflarni qo'llab-quvvatlaydigan shriftlar ro'yxati
-        russian_fonts = [
-            'arial.ttf', 'arialbd.ttf', 'arialbi.ttf', 'ariali.ttf',
-            'arialuni.ttf',  # Arial Unicode - eng yaxshi variant
-            'times.ttf', 'timesbd.ttf', 'timesbi.ttf', 'timesi.ttf',
-            'calibri.ttf', 'calibrib.ttf', 'calibrii.ttf', 'calibriz.ttf',
-            'verdana.ttf', 'verdanab.ttf', 'verdanai.ttf', 'verdanaz.ttf',
-            'tahoma.ttf', 'tahomabd.ttf',
-            'segoeui.ttf', 'segoeuib.ttf', 'segoeuii.ttf', 'segoeuiz.ttf',
-            'segoeuil.ttf', 'seguisb.ttf', 'seguisli.ttf',
-            'consola.ttf', 'consolab.ttf', 'consolai.ttf', 'consolaz.ttf',
-            'cour.ttf', 'courbd.ttf', 'courbi.ttf', 'couri.ttf',
-            'msgothic.ttc', 'msmincho.ttc', 'yugothib.ttf',
-        ]
-        
-        # Linux shriftlari
-        linux_fonts = [
-            'DejaVuSans.ttf', 'DejaVuSerif.ttf', 'FreeSans.ttf', 'FreeSerif.ttf',
-            'LiberationSans-Regular.ttf', 'LiberationSerif-Regular.ttf',
-            'NotoSans-Regular.ttf', 'NotoSerif-Regular.ttf'
-        ]
-        
-        all_fonts = russian_fonts + linux_fonts
-        
-        # Shriftlarni qidirish
-        for font_dir in possible_paths:
-            if os.path.exists(font_dir):
-                for font_file in all_fonts:
-                    font_path = os.path.join(font_dir, font_file)
-                    if os.path.exists(font_path):
-                        font_paths.append(font_path)
-                        logging.info(f"🔍 Shrift topildi: {font_path}")
-        
-        return font_paths
-    
-    def register_unicode_font(self):
-        """Unicode shriftni ro'yxatdan o'tkazish (ruscha harflar uchun)"""
-        
-        # 1. Windows shriftlarini yuklash
-        windows_fonts = self.find_windows_fonts()
-        
-        for font_path in windows_fonts:
-            try:
-                # Shriftni ro'yxatdan o'tkazish
-                pdfmetrics.registerFont(TTFont('UnicodeRussianFont', font_path))
-                logging.info(f"✅ Ruscha shrift muvaffaqiyatli yuklandi: {font_path}")
-                logging.info(f"✅ Kirill (ruscha) harflar to'liq qo'llab-quvvatlanadi")
-                
-                self.font_name = 'UnicodeRussianFont'
-                self.font_loaded = True
-                return self.font_name
-                
-            except Exception as e:
-                logging.warning(f"⚠️ Shrift yuklanmadi {font_path}: {e}")
-                continue
-        
-        # 2. WSL/Linux shriftlarini yuklash
-        try:
-            # DejaVu Sans ko'p tillarni qo'llab-quvvatlaydi
-            dejavu_paths = [
-                '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-                '/usr/share/fonts/DejaVuSans.ttf',
-                '/usr/local/share/fonts/DejaVuSans.ttf'
-            ]
-            
-            for font_path in dejavu_paths:
-                if os.path.exists(font_path):
-                    pdfmetrics.registerFont(TTFont('DejaVuSans', font_path))
-                    logging.info(f"✅ DejaVu Sans shrifti yuklandi (ruscha qo'llab-quvvatlaydi)")
-                    self.font_name = 'DejaVuSans'
-                    self.font_loaded = True
-                    return self.font_name
-            
-            # FreeSans
-            freesans_paths = [
-                '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
-                '/usr/share/fonts/FreeSans.ttf'
-            ]
-            
-            for font_path in freesans_paths:
-                if os.path.exists(font_path):
-                    pdfmetrics.registerFont(TTFont('FreeSans', font_path))
-                    logging.info(f"✅ FreeSans shrifti yuklandi (ruscha qo'llab-quvvatlaydi)")
-                    self.font_name = 'FreeSans'
-                    self.font_loaded = True
-                    return self.font_name
-            
-            # Liberation Sans
-            liberation_paths = [
-                '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
-                '/usr/share/fonts/LiberationSans-Regular.ttf'
-            ]
-            
-            for font_path in liberation_paths:
-                if os.path.exists(font_path):
-                    pdfmetrics.registerFont(TTFont('LiberationSans', font_path))
-                    logging.info(f"✅ Liberation Sans shrifti yuklandi (ruscha qo'llab-quvvatlaydi)")
-                    self.font_name = 'LiberationSans'
-                    self.font_loaded = True
-                    return self.font_name
-                    
-        except Exception as e:
-            logging.warning(f"⚠️ Linux shriftlarini yuklashda xato: {e}")
-        
-        # 3. Standart shrift (faqat lotin)
-        logging.error("❌ Hech qanday Unicode shrift topilmadi!")
-        logging.error("❌ Ruscha harflar ko'rinmasligi mumkin!")
-        logging.error("\n🔧 Yechim: Quyidagi buyruq bilan shriftlarni o'rnating:")
-        logging.error("   sudo apt-get update")
-        logging.error("   sudo apt-get install -y fonts-dejavu fonts-dejavu-core fonts-dejavu-extra")
-        logging.error("   sudo apt-get install -y fonts-liberation fonts-freefont-ttf")
-        logging.error("   sudo apt-get install -y fonts-noto-cjk")
-        logging.error("   fc-cache -fv")
-        
-        self.font_name = 'Helvetica'
-        self.font_loaded = False
-        return self.font_name
-    
-    def get_font(self):
-        """Yuklangan shrift nomini qaytarish"""
-        if not self.font_loaded:
-            self.register_unicode_font()
-        return self.font_name
+# ==================== TRANSLITERATSIYA ====================
+TRANSLIT_MAP = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
+    'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+    'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+    'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch',
+    'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+    'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E', 'Ё': 'Yo',
+    'Ж': 'Zh', 'З': 'Z', 'И': 'I', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M',
+    'Н': 'N', 'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U',
+    'Ф': 'F', 'Х': 'Kh', 'Ц': 'Ts', 'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Shch',
+    'Ъ': '', 'Ы': 'Y', 'Ь': '', 'Э': 'E', 'Ю': 'Yu', 'Я': 'Ya',
+    'ў': "o'", 'ғ': "g'", 'қ': 'q', 'ҳ': 'h',
+    'Ў': "O'", 'Ғ': "G'", 'Қ': 'Q', 'Ҳ': 'H'
+}
 
-# Font manager yaratish
-font_manager = FontManager()
-FONT_NAME = font_manager.get_font()
+def transliterate(text: str) -> str:
+    """Kirill harflarini lotin harflariga o'giradi"""
+    return ''.join(TRANSLIT_MAP.get(c, c) for c in str(text))
 
-# ==========================================
+def safe(text) -> str:
+    """PDF uchun xavfsiz matn"""
+    return transliterate(str(text)) if text else "---"
 
-def safe_unicode_text(text: str) -> str:
-    """Matnni Unicode formatda tozalash (ruscha harflarni saqlash)"""
-    if not text:
-        return ""
-    
-    try:
-        # Agar bytes bo'lsa, UTF-8 da decode qilish
-        if isinstance(text, bytes):
-            text = text.decode('utf-8', 'ignore')
-        
-        # UTF-8 da tozalash, lekin ruscha harflarni o'chirmaslik
-        text = str(text)
-        
-        # Maxsus belgilarni olib tashlash (null, carriage return)
-        text = text.replace('\x00', '').replace('\r', ' ')
-        
-        # Yangi qatorlarni probelga almashtirish
-        text = text.replace('\n', ' ').replace('\t', ' ')
-        
-        # Bir nechta probellarni bittaga almashtirish
-        import re
-        text = re.sub(r'\s+', ' ', text)
-        
-        return text.strip()
-        
-    except Exception as e:
-        logging.error(f"Matn kodlashda xato: {e}")
-        return str(text)
+def sanitize_filename(filename: str) -> str:
+    """Fayl nomini xavfsiz qiladi"""
+    filename = transliterate(filename)
+    filename = re.sub(r'[^\w\s.-]', '', filename)
+    filename = filename.strip().replace(' ', '_')
+    if not filename:
+        filename = "unknown"
+    return filename[:50]
 
-class Questionnaire(StatesGroup):
-    q1_name = State()
-    q2_birth = State()
-    q3_phone = State()
-    q4_city = State()
-    q5_username = State()
-    q6_selfie = State()
-    q7_why = State()
-    q8_start_date = State()
-    q9_specialty = State()
-    q10_job_history = State()
-    q11_duration = State()
-    q12_programs = State()
-    q13_languages = State()
-    q14_schedule = State()
-    q15_salary = State()
-
+# ==================== SAVOLLAR ====================
 questions = [
     "Ismingiz va familiyangiz?",
     "Tug'ilgan yilingiz?",
@@ -265,22 +79,203 @@ questions = [
     "Taqdim etilgan oylik maosh sizga maqulmi (6 000 000 dan boshlanadi)?"
 ]
 
+# ==================== STATES ====================
+class Questionnaire(StatesGroup):
+    q1  = State()
+    q2  = State()
+    q3  = State()
+    q4  = State()
+    q5  = State()
+    q6  = State()
+    q7  = State()
+    q8  = State()
+    q9  = State()
+    q10 = State()
+    q11 = State()
+    q12 = State()
+    q13 = State()
+    q14 = State()
+    q15 = State()
+
+STATES = [
+    Questionnaire.q1,  Questionnaire.q2,  Questionnaire.q3,
+    Questionnaire.q4,  Questionnaire.q5,  Questionnaire.q6,
+    Questionnaire.q7,  Questionnaire.q8,  Questionnaire.q9,
+    Questionnaire.q10, Questionnaire.q11, Questionnaire.q12,
+    Questionnaire.q13, Questionnaire.q14, Questionnaire.q15,
+]
+
+# ==================== PDF YARATISH ====================
+def draw_wrapped_text(c, text, x, y, max_width, font, size, line_height=15):
+    """Uzun matnni qatorlarga bo'lib chizadi, yangi y qaytaradi"""
+    c.setFont(font, size)
+    words = text.split()
+    line = ""
+    for word in words:
+        test = (line + " " + word).strip()
+        if c.stringWidth(test, font, size) <= max_width:
+            line = test
+        else:
+            c.drawString(x, y, line)
+            y -= line_height
+            line = word
+    if line:
+        c.drawString(x, y, line)
+        y -= line_height
+    return y
+
+def create_pdf(answers: dict, username: str, user_id: int) -> str:
+    raw_name = answers.get("q1", "unknown")
+    safe_name = sanitize_filename(raw_name)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"{safe_name}_{timestamp}.pdf"
+
+    c = canvas.Canvas(filename, pagesize=A4)
+    width, height = A4
+    margin = 45
+    max_width = width - margin * 2 - 15
+
+    def new_page():
+        c.showPage()
+        return height - 50
+
+    # --- HEADER ---
+    c.setFillColor(colors.HexColor("#1a1a2e"))
+    c.rect(0, height - 75, width, 75, fill=True, stroke=False)
+
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 22)
+    c.drawCentredString(width / 2, height - 40, "SMART+ ANKETA")
+
+    c.setFont("Helvetica", 10)
+    c.drawCentredString(width / 2, height - 58,
+                        f"Sana: {datetime.now().strftime('%d.%m.%Y %H:%M')}  |  ID: {user_id}  |  @{username}")
+
+    y = height - 100
+
+    for i, question in enumerate(questions):
+        key = f"q{i + 1}"
+        answer_raw = answers.get(key, "---")
+
+        # Selfie uchun maxsus
+        if key == "q6" and str(answer_raw).startswith("Photo:"):
+            answer_text = "[Selfi yuborilgan]"
+        else:
+            answer_text = safe(answer_raw)
+
+        question_text = safe(question)
+
+        # Sahifa tugasa yangi sahifa
+        if y < 100:
+            y = new_page()
+
+        # Savol
+        c.setFillColor(colors.HexColor("#1a1a2e"))
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(margin, y, f"{i + 1}. {question_text}")
+        y -= 18
+
+        # Javob
+        c.setFillColor(colors.HexColor("#333333"))
+        y = draw_wrapped_text(c, answer_text, margin + 10, y, max_width,
+                              "Helvetica", 10, line_height=15)
+
+        # Chiziq
+        c.setStrokeColor(colors.HexColor("#cccccc"))
+        c.line(margin, y, width - margin, y)
+        y -= 12
+
+    # --- FOOTER ---
+    c.setFillColor(colors.HexColor("#1a1a2e"))
+    c.rect(0, 0, width, 35, fill=True, stroke=False)
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica", 9)
+    c.drawCentredString(width / 2, 12, "SMART+  |  Halollik foydadan ustun")
+
+    c.save()
+    return filename
+
+# ==================== ANKETA TUGASH ====================
+async def finish_questionnaire(message: Message, state: FSMContext):
+    data = await state.get_data()
+    answers = data.get("answers", {})
+    username = message.from_user.username or "noname"
+    user_id = message.from_user.id
+
+    await message.answer("✅ Anketa qabul qilindi! PDF tayyorlanmoqda...")
+
+    try:
+        filename = create_pdf(answers, username, user_id)
+
+        # Foydalanuvchiga yuborish
+        pdf_file = FSInputFile(filename)
+        await message.answer_document(pdf_file, caption="📄 Sizning anketangiz PDF ko'rinishida.")
+
+        # Guruhga yuborish (selfie bilan)
+        selfie_id = None
+        for key, val in answers.items():
+            if str(val).startswith("Photo:"):
+                selfie_id = str(val).replace("Photo: ", "").strip()
+                break
+
+        caption = (
+            f"📋 Yangi anketa!\n"
+            f"👤 @{username} (ID: {user_id})\n"
+            f"👤 Ism: {answers.get('q1', '---')}\n"
+            f"📞 Tel: {answers.get('q3', '---')}"
+        )
+
+        if selfie_id:
+            await bot.send_photo(GROUP_ID, photo=selfie_id, caption=caption)
+
+        pdf_file2 = FSInputFile(filename)
+        await bot.send_document(GROUP_ID, document=pdf_file2, caption="📄 To'liq anketa PDF")
+
+    except Exception as e:
+        logging.error(f"Xato: {e}")
+        await message.answer("❌ PDF yaratishda xato yuz berdi. Admin bilan bog'laning.")
+    finally:
+        if os.path.exists(filename):
+            os.remove(filename)
+        await state.clear()
+
+# ==================== UMUMIY JAVOB QAYTA ISHLASH ====================
+async def process_answer(message: Message, state: FSMContext, index: int):
+    data = await state.get_data()
+    answers = data.get("answers", {})
+
+    if message.photo:
+        answers[f"q{index + 1}"] = f"Photo: {message.photo[-1].file_id}"
+    else:
+        answers[f"q{index + 1}"] = message.text or "---"
+
+    await state.update_data(answers=answers)
+
+    next_index = index + 1
+    if next_index < len(questions):
+        await state.set_state(STATES[next_index])
+        await message.answer(questions[next_index])
+    else:
+        await finish_questionnaire(message, state)
+
+# ==================== START ====================
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext):
-    text = """SMART+ — telefonlar, telefon aksessuarlari va ehtiyot qismlarining ulgurji savdosi bilan shug'ullanuvchi ishonchli kompaniya hisoblanadi. 
+    await state.clear()
 
-Biz bozorda sifatli mahsulotlar va barqaror hamkorlik orqali o'z o'rnimizni mustahkamlab kelmoqdamiz. Bugungi kunda kompaniyamizning 9 ta filiali faoliyat yuritib, mijozlarimizga tezkor va qulay xizmat ko'rsatishni ta'minlamoqda. 
-
-Kompaniyamiz asoschisi — Samanov Bobur. 
-
-Bizning asosiy maqsadlarimiz:
-— Yangi ish o'rinlari yaratish
-— Mijozlarga yuqori sifatli xizmat ko'rsatish
-— O'zbekiston rivojiga o'z hissamizni qo'shish
-
-Biz har bir hamkorlikda ishonch va sifatni ustuvor deb bilamiz. 
-
-SMART+ shiori: "Halollik foydadan ustun"""
+    text = (
+        "SMART+ — telefonlar, telefon aksessuarlari va ehtiyot qismlarining "
+        "ulgurji savdosi bilan shug'ullanuvchi ishonchli kompaniya hisoblanadi.\n\n"
+        "Biz bozorda sifatli mahsulotlar va barqaror hamkorlik orqali o'z o'rnimizni "
+        "mustahkamlab kelmoqdamiz. Bugungi kunda kompaniyamizning 9 ta filiali faoliyat "
+        "yuritib, mijozlarimizga tezkor va qulay xizmat ko'rsatishni ta'minlamoqda.\n\n"
+        "Kompaniyamiz asoschisi — Samanov Bobur.\n\n"
+        "Bizning asosiy maqsadlarimiz:\n"
+        "— Yangi ish o'rinlari yaratish\n"
+        "— Mijozlarga yuqori sifatli xizmat ko'rsatish\n"
+        "— O'zbekiston rivojiga o'z hissamizni qo'shish\n\n"
+        "SMART+ shiori: \"Halollik foydadan ustun\""
+    )
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📋 ANKETANI TO'LDIRISH", callback_data="start_questionnaire")]
@@ -291,360 +286,99 @@ SMART+ shiori: "Halollik foydadan ustun"""
 
     if os.path.exists(logo_path):
         try:
-            photo = FSInputFile(logo_path)
-            await message.answer_photo(photo=photo, caption=text, reply_markup=keyboard)
+            await message.answer_photo(FSInputFile(logo_path), caption=text, reply_markup=keyboard)
+            return
         except Exception as e:
-            logging.error(f"Rasm yuborishda xato: {e}")
-            await message.answer(text, reply_markup=keyboard)
-    else:
-        await message.answer(text, reply_markup=keyboard)
+            logging.warning(f"Logo yuborishda xato: {e}")
 
-    await state.clear()
+    await message.answer(text, reply_markup=keyboard)
 
+# ==================== ANKETA BOSHLASH ====================
 @router.callback_query(F.data == "start_questionnaire")
 async def start_questionnaire(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_caption(
-        caption="Anketa boshlandi! Javobingizni yozing yoki yuboring.",
-        reply_markup=None
-    )
-    await state.set_state(Questionnaire.q1_name)
+    await state.clear()
+    await state.update_data(answers={})
+
+    try:
+        await callback.message.edit_caption(caption="Anketa boshlandi!", reply_markup=None)
+    except Exception:
+        try:
+            await callback.message.edit_text("Anketa boshlandi!", reply_markup=None)
+        except Exception:
+            pass
+
+    await state.set_state(STATES[0])
     await callback.message.answer(questions[0])
     await callback.answer()
 
-async def process_answer(message: Message, state: FSMContext, next_state, question_index: int):
-    data = await state.get_data()
-    answers = data.get("answers", {})
-    
-    if message.photo:
-        photo_id = message.photo[-1].file_id
-        answers[f"q{question_index+1}"] = f"Photo: {photo_id}"
-    else:
-        # Matnni Unicode formatda saqlash (ruscha harflarni o'zgartirmasdan)
-        clean_text = safe_unicode_text(message.text)
-        answers[f"q{question_index+1}"] = clean_text
-        logging.info(f"Javob {question_index+1} saqlandi: {clean_text[:50]}...")
-    
-    await state.update_data(answers=answers)
-    
-    if question_index + 1 < len(questions):
-        await state.set_state(next_state)
-        await message.answer(questions[question_index + 1])
-    else:
-        await finish_questionnaire(message, state)
-
-@router.message(Questionnaire.q1_name)
+# ==================== SAVOLLAR HANDLERLARI ====================
+@router.message(Questionnaire.q1)
 async def q1(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q2_birth, 0)
+    await process_answer(message, state, 0)
 
-@router.message(Questionnaire.q2_birth)
+@router.message(Questionnaire.q2)
 async def q2(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q3_phone, 1)
+    await process_answer(message, state, 1)
 
-@router.message(Questionnaire.q3_phone)
+@router.message(Questionnaire.q3)
 async def q3(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q4_city, 2)
+    await process_answer(message, state, 2)
 
-@router.message(Questionnaire.q4_city)
+@router.message(Questionnaire.q4)
 async def q4(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q5_username, 3)
+    await process_answer(message, state, 3)
 
-@router.message(Questionnaire.q5_username)
+@router.message(Questionnaire.q5)
 async def q5(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q6_selfie, 4)
+    await process_answer(message, state, 4)
 
-@router.message(Questionnaire.q6_selfie, F.photo)
-async def q6(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q7_why, 5)
+@router.message(Questionnaire.q6, F.photo)
+async def q6_photo(message: Message, state: FSMContext):
+    await process_answer(message, state, 5)
 
-@router.message(Questionnaire.q7_why)
+@router.message(Questionnaire.q6)
+async def q6_not_photo(message: Message, state: FSMContext):
+    await message.answer("⚠️ Iltimos, selfi rasmingizni yuboring (matn emas, foto).")
+
+@router.message(Questionnaire.q7)
 async def q7(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q8_start_date, 6)
+    await process_answer(message, state, 6)
 
-@router.message(Questionnaire.q8_start_date)
+@router.message(Questionnaire.q8)
 async def q8(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q9_specialty, 7)
+    await process_answer(message, state, 7)
 
-@router.message(Questionnaire.q9_specialty)
+@router.message(Questionnaire.q9)
 async def q9(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q10_job_history, 8)
+    await process_answer(message, state, 8)
 
-@router.message(Questionnaire.q10_job_history)
+@router.message(Questionnaire.q10)
 async def q10(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q11_duration, 9)
+    await process_answer(message, state, 9)
 
-@router.message(Questionnaire.q11_duration)
+@router.message(Questionnaire.q11)
 async def q11(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q12_programs, 10)
+    await process_answer(message, state, 10)
 
-@router.message(Questionnaire.q12_programs)
+@router.message(Questionnaire.q12)
 async def q12(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q13_languages, 11)
+    await process_answer(message, state, 11)
 
-@router.message(Questionnaire.q13_languages)
+@router.message(Questionnaire.q13)
 async def q13(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q14_schedule, 12)
+    await process_answer(message, state, 12)
 
-@router.message(Questionnaire.q14_schedule)
+@router.message(Questionnaire.q14)
 async def q14(message: Message, state: FSMContext):
-    await process_answer(message, state, Questionnaire.q15_salary, 13)
+    await process_answer(message, state, 13)
 
-@router.message(Questionnaire.q15_salary)
+@router.message(Questionnaire.q15)
 async def q15(message: Message, state: FSMContext):
-    await process_answer(message, state, None, 14)
+    await process_answer(message, state, 14)
 
-# PDF yaratish (RUSCHA HARFLAR ASL HOLIDA)
-async def create_pdf(bot, user_id: int, answers: dict, username: str):
-    raw_name = answers.get("q1", "unknown")
-    # Fayl nomi uchun xavfsiz nom (faqat lotin)
-    safe_name = re.sub(r'[^\w\s.-]', '', raw_name)[:50].replace(' ', '_')
-    if not safe_name or safe_name == "unknown":
-        safe_name = f"user_{user_id}"
-    
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f"{safe_name}_{timestamp}.pdf"
-    
-    # PDF yaratish
-    c = canvas.Canvas(filename, pagesize=A4)
-    width, height = A4
-    y = height - 50
-    
-    # Sarlavha
-    try:
-        c.setFont(FONT_NAME, 18)
-        c.drawString(140, y, "SMART+ — HR Anketa")
-    except:
-        c.setFont('Helvetica', 18)
-        c.drawString(140, y, "SMART+ HR Anketa")
-    y -= 50
-    
-    # Foydalanuvchi ma'lumotlari
-    try:
-        c.setFont(FONT_NAME, 12)
-    except:
-        c.setFont('Helvetica', 12)
-    
-    c.drawString(50, y, f"Foydalanuvchi: @{username or 'No username'}")
-    c.drawString(50, y - 20, f"Sana: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    c.drawString(50, y - 40, f"User ID: {user_id}")
-    y -= 70
-    
-    # 15 ta savol va javoblar (ruscha harflar asl holida)
-    for i in range(1, 16):
-        if y < 100:
-            c.showPage()
-            y = height - 50
-            try:
-                c.setFont(FONT_NAME, 12)
-            except:
-                c.setFont('Helvetica', 12)
-        
-        key = f"q{i}"
-        question = questions[i-1]
-        answer = answers.get(key, "Javob berilmagan")
-        
-        # Savolni yozish (o'zbekcha)
-        try:
-            c.setFont(FONT_NAME, 11)
-            c.drawString(50, y, f"{i}. {question}")
-        except Exception as e:
-            logging.warning(f"Savol yozishda xato: {e}")
-            c.setFont('Helvetica', 11)
-            c.drawString(50, y, f"{i}. {question}")
-        y -= 25
-        
-        # Rasm (selfi)
-        if i == 6 and str(answer).startswith("Photo:"):
-            try:
-                file_id = answer.split(": ")[1]
-                file = await bot.get_file(file_id)
-                file_bytes = await bot.download_file(file.file_path)
-                
-                if hasattr(file_bytes, "read"):
-                    data = file_bytes.read()
-                else:
-                    data = file_bytes
-                
-                bio = BytesIO(data)
-                bio.seek(0)
-                
-                img_reader = ImageReader(bio)
-                orig_w, orig_h = img_reader.getSize()
-                img_width = 250
-                img_height = img_width * (orig_h / orig_w) if orig_w else img_width
-                
-                if y - img_height < 50:
-                    c.showPage()
-                    y = height - 50
-                
-                c.drawImage(img_reader, 50, y - img_height, width=img_width, height=img_height)
-                y -= (img_height + 20)
-                
-                try:
-                    c.setFont(FONT_NAME, 10)
-                except:
-                    c.setFont('Helvetica', 10)
-                c.drawString(50, y, "↑ Selfi rasmi")
-                y -= 20
-                
-            except Exception as e:
-                try:
-                    c.setFont(FONT_NAME, 10)
-                except:
-                    c.setFont('Helvetica', 10)
-                c.drawString(70, y, f"[Rasm yuklashda xatolik: {str(e)[:50]}]")
-                y -= 30
-        else:
-            # MATNNI RUSCHA HOLIDA KO'RSATISH (TARJIMASIZ)
-            try:
-                # Shriftni o'rnatish
-                if font_manager.font_loaded:
-                    try:
-                        c.setFont(FONT_NAME, 11)
-                    except:
-                        c.setFont('Helvetica', 11)
-                else:
-                    c.setFont('Helvetica', 11)
-                
-                # Matnni tozalash (ruscha harflarni saqlash)
-                text = safe_unicode_text(str(answer))
-                
-                # Agar matn bo'sh bo'lsa
-                if not text or text == "":
-                    text = "Javob berilmagan"
-                
-                logging.info(f"PDF ga yozilmoqda: {text[:50]}...")
-                
-                # Matnni o'rash (har bir qator 85 belgidan oshmasligi kerak)
-                # Unicode matnlar uchun maxsus o'rash
-                wrapped_lines = []
-                current_line = ""
-                
-                for char in text:
-                    test_line = current_line + char
-                    # Qator uzunligini tekshirish (inglizcha va ruscha belgilar)
-                    if len(test_line) <= 85:
-                        current_line = test_line
-                    else:
-                        if current_line:
-                            wrapped_lines.append(current_line)
-                        current_line = char
-                
-                if current_line:
-                    wrapped_lines.append(current_line)
-                
-                if not wrapped_lines:
-                    wrapped_lines = [text]
-                
-                for line in wrapped_lines:
-                    if y < 50:
-                        c.showPage()
-                        y = height - 50
-                        if font_manager.font_loaded:
-                            try:
-                                c.setFont(FONT_NAME, 11)
-                            except:
-                                c.setFont('Helvetica', 11)
-                        else:
-                            c.setFont('Helvetica', 11)
-                    
-                    try:
-                        # Matnni to'g'ridan-to'g'ri chizish (ruscha harflar bilan)
-                        c.drawString(70, y, line)
-                    except Exception as e:
-                        logging.error(f"Matn yozishda xato: {e}, line: {line[:50]}")
-                        # Xatolik bo'lsa, bo'sh qator yozish
-                        c.drawString(70, y, "[Matnni o'qib bo'lmadi]")
-                    
-                    y -= 20
-                y -= 15
-                
-            except Exception as e:
-                logging.error(f"Javob {i} ni yozishda xato: {e}")
-                try:
-                    c.setFont('Helvetica', 10)
-                    c.drawString(70, y, f"[Xatolik: {str(e)[:50]}]")
-                except:
-                    pass
-                y -= 30
-    
-    c.save()
-    logging.info(f"✅ PDF yaratildi: {filename}")
-    return filename
-
-async def finish_questionnaire(message: Message, state: FSMContext):
-    data = await state.get_data()
-    answers = data.get("answers", {})
-    
-    await message.answer("✅ Anketangiz muvaffaqiyatli tugatildi! Rahmat.")
-    
-    try:
-        pdf_file = await create_pdf(bot, message.from_user.id, answers, message.from_user.username)
-        
-        # PDF fayl mavjudligini tekshirish
-        if os.path.exists(pdf_file):
-            doc = FSInputFile(pdf_file)
-            
-            # Foydalanuvchiga yuborish
-            await bot.send_document(
-                chat_id=message.from_user.id,
-                document=doc,
-                caption="📄 Sizning anketa PDF faylingiz"
-            )
-            
-            # Guruhga yuborish
-            group_caption = (
-                f"🆕 Yangi anketa!\n"
-                f"👤 Foydalanuvchi: {message.from_user.full_name}\n"
-                f"🆔 ID: {message.from_user.id}\n"
-                f"📅 Vaqt: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-            )
-            
-            await bot.send_document(
-                chat_id=GROUP_ID,
-                document=doc,
-                caption=group_caption
-            )
-            
-            # Faylni o'chirish
-            try:
-                os.remove(pdf_file)
-                logging.info(f"🗑️ Fayl o'chirildi: {pdf_file}")
-            except Exception as e:
-                logging.warning(f"Faylni o'chirishda xato: {e}")
-        else:
-            await message.answer("❌ PDF fayl yaratilmadi!")
-            
-    except Exception as e:
-        logging.error(f"Xatolik: {e}", exc_info=True)
-        await message.answer(f"❌ Xatolik yuz berdi: {str(e)}\nIltimos, qaytadan urinib ko'ring.")
-    
-    await state.clear()
-
+# ==================== MAIN ====================
 async def main():
-    print("=" * 60)
-    print("🤖 SMART+ HR Bot ishga tushdi")
-    print("=" * 60)
-    print(f"📝 Shrift holati: {FONT_NAME}")
-    print(f"✅ Ruscha harflarni qo'llab-quvvatlash: {font_manager.font_loaded}")
-    
-    if not font_manager.font_loaded or FONT_NAME == 'Helvetica':
-        print("\n⚠️ OGOHLANTIRISH: Ruscha harflar PDF da ko'rinmasligi mumkin!")
-        print("\n🔧 MUAMMONI HAL QILISH UCHUN QUYIDAGI BUYRUQLARNI ISHGA TUSHIRING:")
-        print("   1. Shriftlarni o'rnatish:")
-        print("      sudo apt-get update")
-        print("      sudo apt-get install -y fonts-dejavu fonts-dejavu-core")
-        print("      sudo apt-get install -y fonts-liberation fonts-freefont-ttf")
-        print("      sudo apt-get install -y fonts-noto-cjk")
-        print("")
-        print("   2. Shriftlarni qayta yuklash:")
-        print("      fc-cache -fv")
-        print("")
-        print("   3. Botni qayta ishga tushiring")
-    else:
-        print("✅ Ruscha, O'zbekcha va Inglizcha harflar to'liq qo'llab-quvvatlanadi")
-        print("✅ Foydalanuvchi javoblari PDF da ASL HOLIDA (tarjimasiz) ko'rinadi")
-    
-    print("=" * 60)
+    logging.info("Bot ishga tushdi...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
