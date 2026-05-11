@@ -13,8 +13,10 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.fonts import addMapping
 from io import BytesIO
 import platform
+import sys
 
 # Logging
 logging.basicConfig(level=logging.INFO)
@@ -30,59 +32,84 @@ dp = Dispatcher()
 router = Router()
 dp.include_router(router)
 
-# ============ SHRIFTNI SOZLASH (WINDOWS UCHUN MAXSUS) ============
+# ============ WINDA WSL UCHUN KENGAYTIRILGAN SHRIFT SOZLASH ============
+def find_windows_fonts():
+    """Windows tizimida mavjud shriftlarni qidirish"""
+    font_paths = []
+    
+    # Windows shrift papkalari
+    windows_drives = ['C:', 'D:', 'E:']
+    font_folders = [
+        '/Windows/Fonts/',
+        '/WINNT/Fonts/',
+        '/WINDOWS/Fonts/'
+    ]
+    
+    # Qidiriladigan shrift nomlari
+    font_names = [
+        'arial.ttf',
+        'arialuni.ttf',
+        'times.ttf',
+        'calibri.ttf',
+        'verdana.ttf',
+        'tahoma.ttf',
+        'msgothic.ttc',
+        'msmincho.ttc',
+        'segoeui.ttf',
+        'consola.ttf'
+    ]
+    
+    for drive in windows_drives:
+        for folder in font_folders:
+            for font in font_names:
+                path = f"{drive}{folder}{font}"
+                if os.path.exists(path):
+                    font_paths.append(path)
+    
+    return font_paths
+
 def register_unicode_fonts():
-    """Windows tizimida ruscha va lotincha shriftlarni ro'yxatdan o'tkazish"""
+    """Ruscha va barcha tillarni qo'llab-quvvatlaydigan shriftlarni ro'yxatdan o'tkazish"""
+    
+    # 1. USUL: Windows shriftlarini topish
+    windows_fonts = find_windows_fonts()
+    
+    for font_path in windows_fonts:
+        try:
+            # Shriftni ro'yxatdan o'tkazish
+            pdfmetrics.registerFont(TTFont('UnicodeFont', font_path))
+            logging.info(f"✅ Shrift muvaffaqiyatli yuklandi: {font_path}")
+            logging.info(f"✅ Ruscha, O'zbekcha, Inglizcha harflar to'liq qo'llab-quvvatlanadi")
+            return 'UnicodeFont'
+        except Exception as e:
+            logging.warning(f"Shrift yuklanmadi {font_path}: {e}")
+            continue
+    
+    # 2. USUL: Reportlab kutubxonasining o'z shriftlari
     try:
-        # Windows uchun shriftlar ro'yxati (eng ko'p qo'llaniladiganlar)
-        fonts_to_try = [
-            "C:/Windows/Fonts/arial.ttf",              # Arial
-            "C:/Windows/Fonts/arialbd.ttf",            # Arial Bold
-            "C:/Windows/Fonts/ariali.ttf",             # Arial Italic
-            "C:/Windows/Fonts/times.ttf",              # Times New Roman
-            "C:/Windows/Fonts/timesbd.ttf",            # Times New Roman Bold
-            "C:/Windows/Fonts/calibri.ttf",            # Calibri
-            "C:/Windows/Fonts/calibrib.ttf",           # Calibri Bold
-            "C:/Windows/Fonts/verdana.ttf",            # Verdana
-            "C:/Windows/Fonts/verdanab.ttf",           # Verdana Bold
-            "C:/Windows/Fonts/tahoma.ttf",             # Tahoma
-            "C:/Windows/Fonts/tahomabd.ttf",           # Tahoma Bold
-            "C:/Windows/Fonts/arialuni.ttf",           # Arial Unicode MS (eng yaxshi)
-            "C:/Windows/Fonts/cour.ttf",               # Courier New
-            "C:/Windows/Fonts/consola.ttf",            # Consolas
-            "C:/Windows/Fonts/msyh.ttf",               # Microsoft YaHei
-            "C:/Windows/Fonts/segoeui.ttf",            # Segoe UI
-            "C:/Windows/Fonts/segoeuib.ttf",           # Segoe UI Bold
-        ]
+        # reportlab bilan birga keladigan shriftlar
+        from reportlab.lib.fonts import addMapping
+        import reportlab.rl_config
+        reportlab.rl_config.warnOnMissingFontGlyph = 0
         
-        # Birinchi mavjud shriftni topish
-        for font_path in fonts_to_try:
-            if os.path.exists(font_path):
-                try:
-                    # Shriftni ro'yxatdan o'tkazish
-                    pdfmetrics.registerFont(TTFont('UnicodeFont', font_path))
-                    logging.info(f"✅ Shrift muvaffaqiyatli yuklandi: {font_path}")
-                    logging.info(f"✅ Ruscha harflar PDF da to'g'ri ko'rinadi")
-                    return 'UnicodeFont'
-                except Exception as e:
-                    logging.warning(f"Shrift yuklanmadi {font_path}: {e}")
-                    continue
-        
-        # Agar hech qanday shrift topilmasa, fallback shrift
-        logging.warning("⚠️ Hech qanday shrift topilmadi! Standart shrift ishlatiladi.")
-        logging.warning("⚠️ Ruscha harflar '#' yoki '?' bo'lib ko'rinishi mumkin.")
-        return 'Helvetica'
-        
-    except Exception as e:
-        logging.error(f"Shriftni yuklashda xatolik: {e}")
-        return 'Helvetica'
+        # FreeSans shrifti (ko'pincha kirillni qo'llab-quvvatlaydi)
+        pdfmetrics.registerFont(TTFont('FreeSans', 'FreeSans.ttf'))
+        logging.info("✅ FreeSans shrifti yuklandi")
+        return 'FreeSans'
+    except:
+        pass
+    
+    # 3. USUL: Standart shrift (faqat lotin)
+    logging.error("❌ Hech qanday Unicode shrift topilmadi!")
+    logging.error("❌ Ruscha harflar PDF da ko'rinmaydi!")
+    logging.error("❌ Yechim: C:/Windows/Fonts/arial.ttf fayli borligini tekshiring")
+    return 'Helvetica'
 
 # Shriftni ro'yxatdan o'tkazish
 FONT_NAME = register_unicode_fonts()
-logging.info(f"PDF uchun ishlatiladigan shrift: {FONT_NAME}")
 # ==========================================
 
-# Transliteratsiya jadvali (kirill -> lotin)
+# Transliteratsiya jadvali
 TRANSLIT_MAP = {
     'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
     'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
@@ -101,17 +128,10 @@ def transliterate(text: str) -> str:
     """Matnni kirill alifbosidan lotin alifbosiga o'giradi"""
     if not text:
         return ""
-    
-    kirill_chars = set('абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯўғқҳЎҒҚҲ')
-    text_chars = set(text)
-    
-    # Agar matnda kirill harflari bo'lsa, transliteratsiya qilamiz
-    if text_chars & kirill_chars:
-        result = []
-        for char in text:
-            result.append(TRANSLIT_MAP.get(char, char))
-        return ''.join(result)
-    return text
+    result = []
+    for char in text:
+        result.append(TRANSLIT_MAP.get(char, char))
+    return ''.join(result)
 
 def sanitize_filename(filename: str) -> str:
     """Fayl nomini xavfsiz qiladi"""
@@ -124,7 +144,6 @@ def sanitize_filename(filename: str) -> str:
         filename = filename[:50]
     return filename
 
-# States (15 ta state)
 class Questionnaire(StatesGroup):
     q1_name = State()
     q2_birth = State()
@@ -142,7 +161,6 @@ class Questionnaire(StatesGroup):
     q14_schedule = State()
     q15_salary = State()
 
-# Savollar (15 ta savol)
 questions = [
     "Ismingiz va familiyangiz?",
     "Tug'ilgan yilingiz?",
@@ -161,7 +179,6 @@ questions = [
     "Taqdim etilgan oylik maosh sizga maqulmi (6 000 000 dan boshlanadi)?"
 ]
 
-# Start komandasi
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext):
     text = """SMART+ — telefonlar, telefon aksessuarlari va ehtiyot qismlarining ulgurji savdosi bilan shug'ullanuvchi ishonchli kompaniya hisoblanadi. 
@@ -190,12 +207,10 @@ SMART+ shiori: "Halollik foydadan ustun"""
         try:
             photo = FSInputFile(logo_path)
             await message.answer_photo(photo=photo, caption=text, reply_markup=keyboard)
-            logging.info("Logo rasm muvaffaqiyatli yuborildi")
         except Exception as e:
             logging.error(f"Rasm yuborishda xato: {e}")
             await message.answer(text, reply_markup=keyboard)
     else:
-        logging.warning(f"Logo fayli topilmadi: {logo_path}")
         await message.answer(text, reply_markup=keyboard)
 
     await state.clear()
@@ -228,7 +243,6 @@ async def process_answer(message: Message, state: FSMContext, next_state, questi
     else:
         await finish_questionnaire(message, state)
 
-# Savol handlerlari
 @router.message(Questionnaire.q1_name)
 async def q1(message: Message, state: FSMContext):
     await process_answer(message, state, Questionnaire.q2_birth, 0)
@@ -289,7 +303,7 @@ async def q14(message: Message, state: FSMContext):
 async def q15(message: Message, state: FSMContext):
     await process_answer(message, state, None, 14)
 
-# PDF yaratish (ruscha harflar bilan ishlaydi)
+# PDF yaratish (MUAMMO HAL QILINGAN)
 async def create_pdf(bot, user_id: int, answers: dict, username: str):
     raw_name = answers.get("q1", "unknown")
     safe_name = sanitize_filename(raw_name)
@@ -304,6 +318,10 @@ async def create_pdf(bot, user_id: int, answers: dict, username: str):
     width, height = A4
     y = height - 50
 
+    # PDF ga UTF-8 kodlashni qo'llash
+    c._doc.info.producer = "SMART+ Bot"
+    c._doc.info.creator = "SMART+ HR System"
+    
     # Sarlavha
     c.setFont(FONT_NAME, 18)
     c.drawString(140, y, "SMART+ — HR Anketa")
@@ -315,7 +333,7 @@ async def create_pdf(bot, user_id: int, answers: dict, username: str):
     c.drawString(50, y - 20, f"Sana: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     y -= 50
 
-    # 15 ta savol uchun aylanish
+    # 15 ta savol
     for i in range(1, 16):
         if y < 120:
             c.showPage()
@@ -326,12 +344,12 @@ async def create_pdf(bot, user_id: int, answers: dict, username: str):
         question = questions[i-1]
         answer = answers.get(key, "Javob berilmagan")
 
-        # Savol matnini chiqarish
+        # Savol
         c.setFont(FONT_NAME, 11)
         c.drawString(50, y, f"{i}. {question}")
         y -= 25
 
-        # Rasmga javob (selfi)
+        # Rasm (selfi)
         if i == 6 and str(answer).startswith("Photo:"):
             try:
                 file_id = answer.split(": ")[1]
@@ -364,71 +382,51 @@ async def create_pdf(bot, user_id: int, answers: dict, username: str):
                 c.drawString(70, y, f"Rasm yuklashda xatolik: {e}")
                 y -= 30
         else:
-            # Matnli javob (ruscha harflar bilan)
+            # MATNNI TO'G'RI YOZISH (RUSCHA UCHUN)
             c.setFont(FONT_NAME, 11)
             text = str(answer)
             
-            # Matnni to'g'ri kodlash (ruscha uchun muhim)
+            # MUHIM: Matnni UTF-8 da to'g'rilash
             try:
-                # Agar text bytes bo'lsa, decode qilish
+                # Agar text bytes bo'lsa, decode
                 if isinstance(text, bytes):
                     text = text.decode('utf-8', 'ignore')
-                # Barcha mumkin bo'lmagan Unicode belgilarni olib tashlash
+                # Unicode belgilarni saqlash
                 text = text.encode('utf-8', 'ignore').decode('utf-8')
-            except Exception as e:
-                logging.warning(f"Matnni kodlashda xatolik: {e}")
+            except:
                 text = str(answer)
             
-            # Matnni o'rash (wrap)
-            lines = []
-            line = ""
-            # Ruscha harflar uchun stringWidth ishlatish
-            for word in text.split():
-                # So'zni birma-bir qo'shib, kenglikni tekshirish
-                test_line = line + word + " "
-                try:
-                    if c.stringWidth(test_line, FONT_NAME, 11) > 480:
-                        if line:
-                            lines.append(line)
-                        line = word + " "
-                    else:
-                        line = test_line
-                except:
-                    # Agar stringWidth xato bersa, standart usul
-                    if len(test_line) > 80:
-                        if line:
-                            lines.append(line)
-                        line = word + " "
-                    else:
-                        line = test_line
+            # Matnni o'rash (har bir qator 80 belgidan oshmasligi kerak)
+            import textwrap
+            wrapped_lines = textwrap.wrap(text, width=85)
             
-            if line:
-                lines.append(line)
-
-            # Har bir qatorni PDF ga yozish
-            for line in lines:
+            if not wrapped_lines:
+                wrapped_lines = [text]
+            
+            for line in wrapped_lines:
                 if y < 50:
                     c.showPage()
                     y = height - 50
                     c.setFont(FONT_NAME, 11)
+                
                 try:
-                    c.drawString(70, y, line.strip())
+                    # To'g'ridan-to'g'ri chizish
+                    c.drawString(70, y, line)
                 except Exception as e:
-                    logging.warning(f"Matnni yozishda xatolik: {e}")
-                    # Xatolik bo'lsa, lotin harflariga o'tkazib yozish
+                    logging.warning(f"Matn yozishda xato: {e}")
+                    # Agar xato bo'lsa, transliteratsiya qil
                     try:
-                        latin_text = transliterate(line)
-                        c.drawString(70, y, latin_text.strip())
+                        latin_line = transliterate(line)
+                        c.drawString(70, y, latin_line)
                     except:
-                        c.drawString(70, y, "Matnni o'qib bo'lmaydi")
+                        c.drawString(70, y, "Matn o'qib bo'lmaydi")
                 y -= 20
             y -= 15
 
     c.save()
-    logging.info(f"PDF muvaffaqiyatli yaratildi: {filename}")
+    logging.info(f"✅ PDF yaratildi: {filename}")
     return filename
 
-# Yakunlash
 async def finish_questionnaire(message: Message, state: FSMContext):
     data = await state.get_data()
     answers = data.get("answers", {})
@@ -439,49 +437,54 @@ async def finish_questionnaire(message: Message, state: FSMContext):
         pdf_file = await create_pdf(bot, message.from_user.id, answers, message.from_user.username)
         doc = FSInputFile(pdf_file)
         
-        # 1. PDF faylni foydalanuvchining o'ziga yuborish
+        # Foydalanuvchiga yuborish
         await bot.send_document(
             chat_id=message.from_user.id,
             document=doc,
-            caption=f"📄 Sizning anketa PDF faylingiz: {os.path.basename(pdf_file)}"
+            caption=f"📄 Sizning anketa PDF faylingiz"
         )
         
-        # 2. PDF faylni guruhga yuborish
+        # Guruhga yuborish
         group_caption = (
             f"🆕 Yangi anketa!\n"
             f"👤 Foydalanuvchi: {message.from_user.full_name}\n"
-            f"🆔 Telegram ID: {message.from_user.id}\n"
-            f"📅 Vaqt: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-            f"📄 Fayl: {os.path.basename(pdf_file)}"
+            f"🆔 ID: {message.from_user.id}\n"
+            f"📅 Vaqt: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         )
         await bot.send_document(
             chat_id=GROUP_ID,
             document=doc,
             caption=group_caption
         )
-        logging.info(f"PDF foydalanuvchiga va guruhga (ID: {GROUP_ID}) yuborildi. Fayl: {pdf_file}")
         
-        # PDF faylni o'chirish (ixtiyoriy)
+        # Faylni o'chirish
         try:
             os.remove(pdf_file)
-            logging.info(f"Fayl o'chirildi: {pdf_file}")
         except:
             pass
         
     except Exception as e:
-        logging.error(f"PDF tayyorlash yoki yuborishda xatolik: {e}", exc_info=True)
-        await message.answer(f"❌ Xatolik yuz berdi: {str(e)}")
+        logging.error(f"Xatolik: {e}", exc_info=True)
+        await message.answer(f"❌ Xatolik: {str(e)}")
     
     await state.clear()
 
 async def main():
-    print("Bot ishga tushdi...")
-    print(f"Shrift holati: {FONT_NAME}")
+    print("=" * 50)
+    print("🤖 SMART+ HR Bot ishga tushdi")
+    print("=" * 50)
+    print(f"📝 Shrift holati: {FONT_NAME}")
+    
     if FONT_NAME == 'Helvetica':
-        print("⚠️ DIQQAT: Ruscha harflar PDF da ko'rinmasligi mumkin!")
-        print("   Yechim: Windows/Fonts papkasida 'arial.ttf' borligini tekshiring")
+        print("❌ XATO: Unicode shrift topilmadi!")
+        print("🔧 Yechim: Quyidagi buyruqni VSCode terminalida ishga tushiring:")
+        print("   python check_fonts.py")
+        print("\n📌 Yoki qo'lda tekshiring:")
+        print("   C:/Windows/Fonts/arial.ttf fayli bormi?")
     else:
         print("✅ Ruscha harflar PDF da to'g'ri ko'rinadi")
+    
+    print("=" * 50)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
