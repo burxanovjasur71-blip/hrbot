@@ -64,7 +64,7 @@ def sanitize_filename(filename: str) -> str:
 questions = [
     "Ismingiz va familiyangiz?",
     "Tug'ilgan yilingiz?",
-    "Telefon raqamingiz va Telegram username ingiz?",
+    "Telefon raqamingiz va Telegram usernameingiz?",
     "Qaysi shaharda/tumanda yashaysiz?",
     "Ma'lumotingiz va oilangiz haqida ma'lumot?",
     "Selfi rasmingizni yuboring (foto):",
