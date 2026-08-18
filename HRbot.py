@@ -76,7 +76,7 @@ questions = [
     "Ota-onangizning kasbi va faoliyati haqida ma'lumot bering?",
     "Qaysi tillarni bilasiz?",
     "Ko'rsatilgan ish vaqti sizga mos keladimi (10:00 dan 20:00)?",
-    "Taqdim etilgan oylik maosh sizga maqulmi (5 000 000 dan boshlanadi)?"
+    "Taqdim etilgan oylik maosh sizga maqulmi (4 500 000 dan boshlanadi)?"
 ]
 
 # ==================== STATES ====================
